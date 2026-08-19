@@ -11,3 +11,8 @@ pm_to_blib
 MYMETA.*
 _build/
 Build
+
+# Distribution artifacts (produced by `make dist`)
+/Physics-PVD-*.tar*
+/Physics-PVD-*/
+META_new.*
