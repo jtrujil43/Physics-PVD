@@ -2,8 +2,9 @@ package Physics::PVD::DSMC;
 use strict;
 use warnings;
 use Carp;
-use POSIX qw(floor ceil acos);
+use POSIX qw(floor ceil acos HUGE_VAL);
 use List::Util qw(sum max min);
+use Scalar::Util qw(looks_like_number);
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Direct Simulation Monte Carlo for PVD vapor transport
@@ -305,12 +306,52 @@ sub mean_arrival_energy {
     return sum(@e) / scalar(@e);
 }
 
+# Get the hard-sphere mean free path of the background gas (m).
+# An exact vacuum has an infinite mean free path.
+sub mean_free_path {
+    my ($self) = @_;
+    my $pressure = $self->{gas_pressure};
+    my $temperature = $self->{gas_temperature};
+    my $sigma = $self->{sigma_ref};
+
+    croak "gas pressure must be a non-negative number"
+        unless defined($pressure) && looks_like_number($pressure)
+            && $pressure == $pressure && $pressure >= 0;
+    croak "gas temperature must be a positive number"
+        unless defined($temperature) && looks_like_number($temperature)
+            && $temperature == $temperature && $temperature > 0;
+    croak "collision cross-section sigma_ref must be a positive number"
+        unless defined($sigma) && looks_like_number($sigma)
+            && $sigma == $sigma && $sigma > 0;
+
+    return HUGE_VAL if $pressure == 0;
+    my $gas_n = $pressure / (KB * $temperature);
+    return 1.0 / (sqrt(2) * $gas_n * $sigma);
+}
+
 # Get Knudsen number for the system
 sub knudsen_number {
     my ($self) = @_;
-    my $gas_n = $self->{gas_pressure} / (KB * $self->{gas_temperature});
-    my $mfp = 1.0 / (sqrt(2) * $gas_n * $self->{sigma_ref});
-    return $mfp / $self->{substrate_distance};
+    my $distance = $self->{substrate_distance};
+    croak "substrate distance must be a positive number"
+        unless defined($distance) && looks_like_number($distance)
+            && $distance == $distance && $distance > 0;
+    return $self->mean_free_path / $distance;
+}
+
+# Classify a Knudsen number using the standard rarefied-gas regimes.
+# With no argument, classify the current chamber configuration.
+sub transport_regime {
+    my ($self, $knudsen) = @_;
+    $knudsen = $self->knudsen_number unless defined $knudsen;
+    croak "Knudsen number must be a non-negative number"
+        unless looks_like_number($knudsen)
+            && $knudsen == $knudsen && $knudsen >= 0;
+
+    return 'continuum'      if $knudsen < 0.01;
+    return 'slip'           if $knudsen < 0.1;
+    return 'transitional'   if $knudsen < 10;
+    return 'free_molecular';
 }
 
 # Get simulation statistics
@@ -318,12 +359,16 @@ sub stats {
     my ($self) = @_;
     my @active = grep { $_->{active} } @{$self->{particles}};
     my @arrived = grep { !$_->{active} && $_->{z} <= 0 } @{$self->{particles}};
+    my $mean_free_path = $self->mean_free_path;
+    my $knudsen_number = $self->knudsen_number;
     return {
         total_particles => scalar(@{$self->{particles}}),
         arrived         => scalar(@arrived),
         still_flying    => scalar(@active),
         mean_energy_eV  => $self->mean_arrival_energy,
-        knudsen_number  => $self->knudsen_number,
+        mean_free_path_m => $mean_free_path,
+        knudsen_number  => $knudsen_number,
+        transport_regime => $self->transport_regime($knudsen_number),
         time            => $self->{time},
     };
 }
@@ -339,8 +384,32 @@ Physics::PVD::DSMC - Direct Simulation Monte Carlo for PVD vapor transport
 =head1 DESCRIPTION
 
 Simulates the kinetic transport of sputtered atoms through a background gas
-from target to substrate. Handles free-molecular, transitional, and
-continuum flow regimes. Models Thompson energy distribution, cosine^n
-angular emission, and gas-phase scattering.
+from target to substrate. Handles free-molecular, transitional, slip, and
+continuum flow regimes. Models Thompson energy distribution, cosine^n angular
+emission, and gas-phase scattering.
+
+=head1 TRANSPORT DIAGNOSTICS
+
+=over 4
+
+=item mean_free_path
+
+Returns the hard-sphere background-gas mean free path in metres.  A pressure
+of exactly zero represents vacuum and returns positive infinity.  Invalid
+negative pressure, non-positive temperature, or non-positive collision
+cross-section values raise an exception.
+
+=item knudsen_number
+
+Returns the mean free path divided by the target-to-substrate distance.  The
+distance must be positive.
+
+=item transport_regime([$knudsen])
+
+Returns one of C<continuum>, C<slip>, C<transitional>, or C<free_molecular>.
+When no Knudsen number is supplied, the current chamber configuration is
+classified.  The boundaries are 0.01, 0.1, and 10.
+
+=back
 
 =cut

@@ -11,6 +11,7 @@ WriteMakefile(
         'Carp'       => 0,
         'List::Util' => 1.33,
         'POSIX'      => 0,
+        'Scalar::Util' => 0,
         'File::Path' => 0,
         'File::Spec' => 0,
         'File::Temp' => 0,

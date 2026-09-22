@@ -49,15 +49,10 @@ printf "  Arrived at substrate:  %d (%.1f%%)\n",
        $stats->{arrived}, 100*$stats->{arrived}/$stats->{total_particles};
 printf "  Still in flight:       %d\n", $stats->{still_flying};
 printf "  Mean arrival energy:   %.2f eV\n", $stats->{mean_energy_eV};
+printf "  Mean free path:        %.3e m\n", $stats->{mean_free_path_m};
 printf "  Knudsen number:        %.2f\n", $stats->{knudsen_number};
-
-if ($stats->{knudsen_number} > 10) {
-    print "  Regime: Free-molecular (ballistic transport)\n";
-} elsif ($stats->{knudsen_number} > 0.1) {
-    print "  Regime: Transitional (partial thermalization)\n";
-} else {
-    print "  Regime: Continuum (fully thermalized)\n";
-}
+(my $regime = $stats->{transport_regime}) =~ s/_/ /g;
+printf "  Transport regime:     %s\n", ucfirst($regime);
 
 # Analyze flux uniformity
 my $flux = $dsmc->get_flux_distribution;

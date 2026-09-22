@@ -445,16 +445,28 @@ List of arrival angles (degrees from normal) for substrate-arriving particles.
 
 #### `mean_arrival_energy()` → float (eV)
 
+#### `mean_free_path()` → float (m)
+
+Hard-sphere mean free path in the background gas. An exact vacuum (`pressure
+=> 0`) returns positive infinity; invalid negative pressure, non-positive gas
+temperature, and non-positive collision cross sections are rejected.
+
 #### `knudsen_number()` → float
 
 Ratio of mean free path to target-substrate distance.
+
+#### `transport_regime([$knudsen])` → string
+
+Classifies either the supplied Knudsen number or the current chamber as
+`continuum`, `slip`, `transitional`, or `free_molecular`.
 
 #### `stats()` → hashref
 
 ```perl
 my $s = $dsmc->stats;
 # { total_particles => 10000, arrived => 7500, still_flying => 200,
-#   mean_energy_eV => 3.2, knudsen_number => 2.5, time => 5e-4 }
+#   mean_energy_eV => 3.2, mean_free_path_m => 0.1,
+#   knudsen_number => 2.5, transport_regime => 'transitional', time => 5e-4 }
 ```
 
 ---
@@ -819,6 +831,21 @@ my $r = $atk->get_results;
 printf "Binding energy: %.2f eV\n", $r->{binding_energy_eV};
 ```
 
+### 7. Transport Regime Diagnostics
+
+```perl
+use Physics::PVD::DSMC;
+
+my $dsmc = Physics::PVD::DSMC->new(
+    pressure => 1.0, temperature => 300, substrate_distance => 0.04,
+);
+printf "lambda = %.3e m, Kn = %.3g, regime = %s\n",
+    $dsmc->mean_free_path, $dsmc->knudsen_number,
+    $dsmc->transport_regime;
+```
+
+See: `examples/transport_regimes.pl`
+
 ---
 
 ## Physical Models
@@ -856,9 +883,10 @@ Bird's method (1994) for rarefied gas dynamics:
 
 | Kn | Regime | Transport |
 |----|--------|-----------|
-| > 10 | Free-molecular | Ballistic, line-of-sight |
-| 0.1–10 | Transitional | Partial thermalization |
-| < 0.1 | Continuum | Fully diffusive |
+| ≥ 10 | Free-molecular | Ballistic, line-of-sight |
+| 0.1 ≤ Kn < 10 | Transitional | Partial thermalization |
+| 0.01 ≤ Kn < 0.1 | Slip | Near-continuum with wall slip |
+| < 0.01 | Continuum | Fully diffusive |
 
 ---
 
@@ -880,10 +908,12 @@ Physics-PVD/
 │               ├── LAMMPS.pm         # LAMMPS MD interface
 │               └── QuantumATK.pm     # QuantumATK DFT/DFTB
 ├── t/
-│   └── basic.t                       # Test suite
+│   ├── basic.t                       # Core simulation tests
+│   └── dsmc_diagnostics.t            # Transport diagnostics and edge cases
 └── examples/
     ├── kmc_basic.pl                  # Simple KMC deposition
     ├── dsmc_transport.pl             # Vapor transport analysis
+    ├── transport_regimes.pl           # Mean-free-path and Kn regime scan
     ├── hybrid_dsmc_kmc.pl            # Coupled DSMC→KMC
     └── lammps_pvd.pl                 # LAMMPS MD deposition
 ```
